@@ -1,0 +1,5 @@
+mcp[cli]>=1.2.0
+mss>=9.0.1
+pillow>=10.0.0
+psutil>=5.9.0
+pywin32>=306

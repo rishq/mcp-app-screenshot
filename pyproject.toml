@@ -1,0 +1,21 @@
+[project]
+name = "mcp-app-screenshot"
+version = "0.1.0"
+description = "Ultra-fast Windows MCP server for capturing application and IDE window screenshots directly via Win32 DWM and MSS."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "mcp[cli]>=1.2.0",
+    "mss>=9.0.1",
+    "pillow>=10.0.0",
+    "psutil>=5.9.0",
+    "pywin32>=306; sys_platform == 'win32'",
+]
+
+[project.scripts]
+mcp-app-screenshot = "server:mcp.run"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
