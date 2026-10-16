@@ -1,53 +1,90 @@
 # MCP Application & IDE Screenshot Server
 
-A lightweight, ultra-fast (<15ms latency) Model Context Protocol (MCP) server for Windows that captures screenshots of specific application windows—such as your IDE (`Code.exe`, `devenv.exe`, `idea64.exe`) and your compiled applications—directly into memory for AI visual debugging.
+A Windows-focused Model Context Protocol (MCP) server for capturing application windows, IDEs, monitors, and screen regions for visual debugging. It uses `PrintWindow` for background capture and MSS for foreground screen capture. Capture is fast—typically tens of milliseconds—but depends on the selected mode, window type, and image format.
 
-## Features
+## Install and run
 
-- **Background Window Capture (`Win32 PrintWindow`):** Captures windows directly from the Windows Desktop Window Manager (DWM) buffer using `PW_RENDERFULLCONTENT`, even if the window is behind other windows.
-- **Hardware-Accelerated Fallback (`mss`):** Supports bringing DirectX/OpenGL/Vulkan windows to the foreground for sub-15ms bounding-box screen grabs.
-- **Side-by-Side IDE + App Capture:** Includes `capture_ide_and_app` to grab both your source code in the IDE and the running compiled application in a single tool call.
-- **High-DPI Aware:** Automatically handles Windows 10/11 DPI scaling without cropping or blurring.
-- **Optional ShareX CLI Bridge:** Includes `trigger_sharex_workflow` if you still wish to invoke ShareX custom uploaders or annotation workflows.
-
-## Tools Provided
-
-1. `list_open_windows()` — Lists all visible open windows with titles, process names, PIDs, and coordinates.
-2. `capture_application_window(target, mode="background", max_width=1920, save_path=None)` — Captures a window by title substring or executable name.
-3. `capture_ide_and_app(ide_target="Code.exe", app_target="...", max_width=1600)` — Captures both the IDE and target application in one call.
-4. `trigger_sharex_workflow(workflow_name="ActiveWindow", sharex_exe_path="...")` — Triggers ShareX CLI commands silently.
-
-## Quick Start (with `uv`)
+The project targets Python 3.10+ and can be run directly with `uvx`:
 
 ```powershell
-git clone https://github.com/rishq/mcp-app-screenshot.git
-cd mcp-app-screenshot
-uv sync
+uvx --from . mcp-app-screenshot
 ```
 
-Test with the MCP Inspector:
+For local development:
+
 ```powershell
+uv sync
 uv run mcp dev server.py
 ```
 
-## MCP Client Configuration
+## MCP tools
 
-Add this to your `.cursor/mcp.json`, `.vscode/mcp.json`, or `claude_desktop_config.json`:
+- `list_open_windows()` lists permitted, visible application windows.
+- `capture_application_window(target="", mode="background", max_width=1568, max_height=1568, format="png", quality=80, save_path=None, allow_foreground_fallback=False, hwnd=None, pid=None, client_area_only=False, delay_ms=0)` captures a chosen window. `hwnd`, then `pid`, take priority over `target`.
+- `capture_ide_and_app(ide_target="Code.exe", app_target="...", max_width=1568, max_height=1568, format="png", quality=80, allow_foreground_fallback=False)` captures both independently, retaining a successful capture when the other fails.
+- `capture_screen(monitor=0, max_width=1568, max_height=1568, format="png", quality=80, delay_ms=0)` captures all monitors (`0`) or one monitor (`1..N`).
+- `capture_region(left, top, width, height, max_width=1568, max_height=1568, format="png", quality=80, delay_ms=0)` captures an arbitrary desktop rectangle.
+- `wait_for_window(target, timeout_s=10)` waits for an allowed visible window and returns its description.
+- `trigger_sharex_workflow(workflow_name="ActiveWindow")` triggers one approved ShareX workflow.
+
+Capture tools return a JSON metadata string followed by an MCP image. Metadata includes the window title, process, PID, HWND, original and final dimensions, and the mode used. Supported response formats are `png`, `jpeg`, and `webp`; `quality` applies to JPEG and WebP.
+
+## Security and configuration
+
+The server does not expose windows belonging to password managers by default. These environment variables configure its boundaries:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SHAREX_PATH` | `C:\Program Files\ShareX\ShareX.exe` | The trusted ShareX executable used by `trigger_sharex_workflow`. Only `ActiveWindow`, `FullScreen`, and `RectangleRegion` can be invoked. |
+| `SCREENSHOT_DIR` | `./screenshots` | The only directory where `capture_application_window(save_path=...)` may write. Paths are resolved to reject traversal and symlink escapes. Saved files must use `.png`, `.jpg`, `.jpeg`, or `.webp`. |
+| `ALLOWED_PROCESSES` | unset | Optional comma-separated process allowlist, matched case-insensitively. When set, only listed processes are visible or capturable. |
+| `BLOCKED_PROCESSES` | `KeePass.exe,KeePassXC.exe,1Password.exe,Bitwarden.exe,LastPass.exe` | Comma-separated process blocklist, matched case-insensitively. It takes precedence over the allowlist. |
+
+For example, to expose only VS Code and a development application:
+
+```powershell
+$env:ALLOWED_PROCESSES = "Code.exe,MyApp.exe"
+$env:SCREENSHOT_DIR = "D:\mcp-screenshots"
+```
+
+## Client configuration
+
+Use `uvx` from an MCP client configuration:
 
 ```json
 {
   "mcpServers": {
     "app-screenshot": {
-      "command": "uv",
+      "command": "uvx",
       "args": [
-        "--directory",
+        "--from",
         "C:\\path\\to\\mcp-app-screenshot",
-        "run",
-        "server.py"
-      ]
+        "mcp-app-screenshot"
+      ],
+      "env": {
+        "SCREENSHOT_DIR": "C:\\path\\to\\screenshots",
+        "ALLOWED_PROCESSES": "Code.exe,MyApp.exe"
+      }
     }
   }
 }
+```
+
+## Limitations
+
+`PrintWindow` cannot reliably capture popup menus and some GPU-rendered windows. Use `mode="foreground"` for those applications, or set `allow_foreground_fallback=True` to opt into bringing the target window to the front. Foreground capture can include anything visually covering the window at capture time.
+
+## Demo
+
+<!-- Add a screenshot or short GIF demonstrating list_open_windows and capture_application_window here. -->
+
+_Screenshot/GIF demo placeholder._
+
+## Development
+
+```powershell
+uv run --with pytest --with ruff pytest
+uv run --with ruff ruff check .
 ```
 
 ## License
